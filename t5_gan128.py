@@ -201,7 +201,7 @@ if __name__ == "__main__":
     # ____________________________________________________ dgan tutorial ____________________________________________________ 
 
     workers = 2             # Number of workers for dataloader
-    batch_size = 64        # Batch size during training
+    batch_size = 20        # Batch size during training
     image_size = 128         # Spatial size of training images. All images will be resized to this size using a transform
     nc = 3                  # Number of channels in the training images. For color images this is 3
     nz = 100                # Size of z latent vector (i.e. size of generator input)
@@ -290,12 +290,13 @@ if __name__ == "__main__":
     print("Starting Training Loop...") 
     for epoch in range(num_epochs):
         for i, data in enumerate(dataloader, 0):
-
+            print(f"i = {i}")
             real_cpu = data[0].to(device)
             b_size = real_cpu.size(0)
             wrong_cpu = data[1].to(device)
             captions = data[2]
             for caption in captions:
+                print(f"{len(caption)} new captions...")
                 ############################
                 # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
                 ###########################
@@ -308,7 +309,7 @@ if __name__ == "__main__":
                 # txt_emb = torch.randn(b_size, txt_size, device=device)
 
                 # (a) train with real
-
+                print("\t a")
                 # Forward pass real batch through D
                 output = netD(real_cpu, encoding_mean).view(-1)
                 # Calculate loss on all-real batch
@@ -318,7 +319,7 @@ if __name__ == "__main__":
                 D_x = output.mean().item()
 
                 # (b) train with wrong (newly added)
-
+                print("\t b")
                 label.fill_(fake_label)
                 output = netD(wrong_cpu, encoding_mean).view(-1)
                 errD_wrong = criterion(output, label)
@@ -326,7 +327,7 @@ if __name__ == "__main__":
                 D_x_wrong = output.mean().item()
 
                 # (c) train with fake
-
+                print("\t c")
                 ## Train with all-fake batch
                 # Generate batch of latent vectors
                 noise = torch.randn(b_size, nz, 1, 1, device=device)
@@ -344,7 +345,7 @@ if __name__ == "__main__":
                 errD = errD_real + errD_fake + errD_wrong
                 # Update D
                 optimizerD.step()
-
+                print("\t d")
                 ############################
                 # (2) Update G network: maximize log(D(G(z)))
                 ###########################
@@ -359,12 +360,6 @@ if __name__ == "__main__":
                 D_G_z2 = output.mean().item()
                 # Update G
                 optimizerG.step()
-
-                # Output training stats
-                if i % 50 == 0:
-                    print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
-                        % (epoch, num_epochs, i, len(dataloader),
-                            errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
 
                 # Save Losses for plotting later
                 G_losses.append(errG.item())
@@ -386,3 +381,8 @@ if __name__ == "__main__":
                         plt.imsave(f"out/fake_img_{iters}_{j}.jpg", img)
 
                 iters += 1
+            # Output training stats
+            if i % 50 == 0:
+                print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
+                    % (epoch, num_epochs, i, len(dataloader),
+                        errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
