@@ -1,9 +1,0 @@
-
-
-import numpy as np
-
-print("hello")
-
-from torch.utils.serialization import load_lua
-
-x = load_lua('x.t7')
