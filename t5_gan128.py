@@ -19,6 +19,7 @@ from einops import rearrange
 from transformers import T5Tokenizer, T5EncoderModel
 import matplotlib.pyplot as plt
 from random import randrange
+from PIL import Image
 
 class TxtToImgDataset(Dataset):
 	def __init__(self, img_dir, labels_file, captions_dir, transform=None, target_transform=None):
@@ -36,13 +37,14 @@ class TxtToImgDataset(Dataset):
 		rand_idx = randrange(len(self.img_labels))
 		while rand_idx == idx:
 			rand_idx = randrange(len(self.img_labels))
-		wrong_img_name = self.img_labels.iloc[rand_idx, 1].replace(r'/', '\\')
-		
+		wrong_img_name = self.img_labels.iloc[rand_idx, 1].replace(r'/', '\\')		
 		real_img_path = os.path.join(self.img_dir, real_img_name)
-		real_image = read_image(real_img_path) 
+		real_image = Image.open(real_img_path).convert('RGB')
+		# real_image = read_image(real_img_path) 
 
 		wrong_img_path = os.path.join(self.img_dir, wrong_img_name)
-		wrong_image = read_image(wrong_img_path) 
+		wrong_image = Image.open(wrong_img_path).convert('RGB')  
+		# wrong_image = read_image(wrong_img_path) 
 
 		captions_file_name = real_img_name.replace(r'.jpg', '.txt')
 		captions_path = os.path.join(self.captions_dir, captions_file_name)
@@ -228,7 +230,8 @@ if __name__ == "__main__":
 
     dataset = TxtToImgDataset(img_dir=IMAGES_DIR, labels_file=LABELS_FILE, captions_dir=CAPTIONS_DIR,
                                 transform=transforms.Compose([
-                                    transforms.Resize(image_size),
+                                    transforms.PILToTensor(),
+                                    transforms.Resize((image_size, image_size)),
                                     transforms.CenterCrop(image_size),
                                     # transforms.ToTensor(),
                                     transforms.ConvertImageDtype(torch.float32),
