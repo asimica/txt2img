@@ -293,57 +293,36 @@ if __name__ == "__main__":
     print("Starting Training Loop...") 
     for epoch in range(num_epochs):
         for i, data in enumerate(dataloader, 0):
-            # print(f"i = {i}")
+            print(f"i = {i}")
             real_cpu = data[0].to(device)
+            b_size = real_cpu.size(0)
             wrong_cpu = data[1].to(device)
             captions = data[2]
-            b_size = real_cpu.size(0)            
-
-            # print(f"before check . . .")
-            # print(f"real_cpu.shape = {real_cpu.shape}")
-            # print(f"wrong_cpu.shape = {wrong_cpu.shape}")
-            # print(f"len(captions) = {len(captions)}")                        
-
-            if b_size % 2 != 0:
-                b_size = b_size - 1
-                real_cpu = real_cpu[:b_size]
-                wrong_cpu = wrong_cpu[:b_size]
-
-            # print(f"after check . . .")
-            # print(f"real_cpu.shape = {real_cpu.shape}")
-            # print(f"wrong_cpu.shape = {wrong_cpu.shape}")
-            # print(f"len(captions) = {len(captions)}")        
-
             for caption in captions:
-                # print(f"{len(caption)} new captions...")
+                print(f"{len(caption)} new captions...")
                 ############################
                 # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
                 ###########################
+                ## Train with all-real batch
                 netD.zero_grad()
                 label = torch.full((b_size,), real_label, dtype=torch.float, device=device)
-                label_interp = torch.full((int(b_size * 3/2),), real_label, dtype=torch.float, device=device)
-                caption = caption[:b_size]
-
+                
                 encoding_mean = t5_encode(caption, max_text_length, tokenizer, model)
-                # print(f"encoding_mean.shape = {encoding_mean.shape}")
-                encoding_mean_interp = torch.full((int(b_size * 3/2), txt_size), 0., dtype=torch.float, device=device)
-                # print(f"encoding_mean_interp.shape = {encoding_mean_interp.shape}") 
-                # print(f"encoding_mean.size(0) = {encoding_mean.size(0)}")                
-                encoding_mean_interp[:encoding_mean.size(0)] = encoding_mean
-                encoding_mean_interp[encoding_mean.size(0):] = encoding_mean[:int(encoding_mean.size(0)/2)]
-                encoding_mean_interp[encoding_mean.size(0):] += encoding_mean[int(encoding_mean.size(0)/2):]
-                encoding_mean_interp[encoding_mean.size(0):] /= 2
+
+                # txt_emb = torch.randn(b_size, txt_size, device=device)
 
                 # (a) train with real
-                # print("\t a")
+                print("\t a")
+                # Forward pass real batch through D
                 output = netD(real_cpu, encoding_mean).view(-1)
+                # Calculate loss on all-real batch
                 errD_real = criterion(output, label)
+                # Calculate gradients for D in backward pass
                 errD_real.backward()
                 D_x = output.mean().item()
 
                 # (b) train with wrong (newly added)
-                # dodati cls weight <-----------------------------------------------------------------
-                # print("\t b")
+                print("\t b")
                 label.fill_(fake_label)
                 output = netD(wrong_cpu, encoding_mean).view(-1)
                 errD_wrong = criterion(output, label)
@@ -351,30 +330,38 @@ if __name__ == "__main__":
                 D_x_wrong = output.mean().item()
 
                 # (c) train with fake
-                # print("\t c")
+                print("\t c")
+                ## Train with all-fake batch
+                # Generate batch of latent vectors
                 noise = torch.randn(b_size, nz, 1, 1, device=device)
+                # Generate fake image batch with G
                 fake = netG(noise, encoding_mean)
                 label.fill_(fake_label)
+                # Classify all fake batch with D
                 output = netD(fake.detach(), encoding_mean).view(-1)
-                # dodati cls weight <-----------------------------------------------------------------
+                # Calculate D's loss on the all-fake batch
                 errD_fake = criterion(output, label)
+                # Calculate the gradients for this batch, accumulated (summed) with previous gradients
                 errD_fake.backward()
                 D_G_z1 = output.mean().item()
+                # Compute error of D as sum over the fake and the real batches
                 errD = errD_real + errD_fake + errD_wrong
+                # Update D
                 optimizerD.step()
-                # print("\t d")
-
+                print("\t d")
                 ############################
                 # (2) Update G network: maximize log(D(G(z)))
                 ###########################
                 netG.zero_grad()
-                label_interp.fill_(real_label) # fake labels are real for generator cost
-                noise_interp = torch.randn(int(b_size * 3/2), nz, 1, 1, device=device)             
-                fake = netG(noise_interp, encoding_mean_interp)   
-                output = netD(fake, encoding_mean_interp).view(-1)
-                errG = criterion(output, label_interp)
+                label.fill_(real_label)  # fake labels are real for generator cost
+                # Since we just updated D, perform another forward pass of all-fake batch through D
+                output = netD(fake, encoding_mean).view(-1)
+                # Calculate G's loss based on this output
+                errG = criterion(output, label)
+                # Calculate gradients for G
                 errG.backward()
                 D_G_z2 = output.mean().item()
+                # Update G
                 optimizerG.step()
 
                 # Save Losses for plotting later
@@ -382,7 +369,7 @@ if __name__ == "__main__":
                 D_losses.append(errD.item())
 
                 # Check how the generator is doing by saving G's output on fixed_noise
-                if (iters % 200 == 0) or ((epoch == num_epochs-1) and (i == len(dataloader)-1)):
+                if (iters % 50 == 0) or ((epoch == num_epochs-1) and (i == len(dataloader)-1)):
                     with torch.no_grad():
                         fake = netG(fixed_noise, fixed_encoding_mean).detach().cpu()
                     grid = vutils.make_grid(fake, padding=2, normalize=True)
@@ -399,6 +386,6 @@ if __name__ == "__main__":
                 iters += 1
             # Output training stats
             if i % 50 == 0:
-                print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z_int)): %.4f / %.4f'
+                print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
                     % (epoch, num_epochs, i, len(dataloader),
                         errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))

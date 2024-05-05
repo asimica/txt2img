@@ -217,6 +217,7 @@ if __name__ == "__main__":
     txt_size = 512         # Number of dimensions for raw text 
     nt = 256                # Number of dimensions for text features 
     max_text_length = 256
+    cls_weight = 0.5
     dataroot = IMAGES_DIR
     
     # dataset = dset.ImageFolder(root=dataroot,
@@ -347,6 +348,7 @@ if __name__ == "__main__":
                 label.fill_(fake_label)
                 output = netD(wrong_cpu, encoding_mean).view(-1)
                 errD_wrong = criterion(output, label)
+                errD_wrong *= cls_weight
                 errD_wrong.backward()
                 D_x_wrong = output.mean().item()
 
@@ -358,6 +360,7 @@ if __name__ == "__main__":
                 output = netD(fake.detach(), encoding_mean).view(-1)
                 # dodati cls weight <-----------------------------------------------------------------
                 errD_fake = criterion(output, label)
+                errD_fake *= (1 - cls_weight)
                 errD_fake.backward()
                 D_G_z1 = output.mean().item()
                 errD = errD_real + errD_fake + errD_wrong
